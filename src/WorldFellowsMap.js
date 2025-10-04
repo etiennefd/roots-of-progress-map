@@ -127,7 +127,7 @@ export default function WorldFellowsMap({ data = [], height = 600 }) {
     cityCountryCoords[`${city}|||${country}`] || cityCoords[city] || null;
 
   // ------------------------------------------------------------
-  // Aggregate fellows by (city, country)
+  // Aggregate fellows by (city, country) and handle overlaps
   // ------------------------------------------------------------
   const byCity = useMemo(() => {
     const map = new Map();
@@ -138,6 +138,29 @@ export default function WorldFellowsMap({ data = [], height = 600 }) {
     }
     return [...map.values()].sort((a, b) => b.people.length - a.people.length);
   }, [data]);
+
+  // Function to calculate offset for overlapping circles
+  const getOffsetForOverlap = (coords, allCoords, index) => {
+    const [lat, lng] = coords;
+    const threshold = 0.01; // ~1km threshold for considering circles overlapping
+    
+    // Check if this circle overlaps with any previous ones
+    for (let i = 0; i < index; i++) {
+      const [otherLat, otherLng] = allCoords[i];
+      const distance = Math.sqrt(Math.pow(lat - otherLat, 2) + Math.pow(lng - otherLng, 2));
+      
+      if (distance < threshold) {
+        // Add a small offset to make overlapping circles visible
+        const offsetAmount = 0.005; // ~500m offset
+        const angle = (index * 45) % 360; // Spread overlapping circles in a circle
+        const offsetLat = lat + offsetAmount * Math.cos(angle * Math.PI / 180);
+        const offsetLng = lng + offsetAmount * Math.sin(angle * Math.PI / 180);
+        return [offsetLat, offsetLng];
+      }
+    }
+    
+    return coords; // No offset needed
+  };
 
   // Color palette for different countries
   const countryColors = useMemo(() => {
@@ -206,67 +229,81 @@ export default function WorldFellowsMap({ data = [], height = 600 }) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {byCity.map(({ city, country, people }) => {
-          const coords = coordsFor(city, country);
-          if (!coords) return null; // Defensive: skip cities lacking coordinates
-          const [lat, lng] = coords;
-          const count = people.length;
-          const title = `${city}${country ? ", " + country : ""}`;
-          const color = countryColors[country] || '#666666';
+        {byCity
+          .slice()
+          .sort((a, b) => a.people.length - b.people.length) // Sort by count ascending (smallest first)
+          .map(({ city, country, people }, index) => {
+            const coords = coordsFor(city, country);
+            if (!coords) return null; // Defensive: skip cities lacking coordinates
+            
+            // Get all coordinates for overlap detection
+            const allCoords = byCity
+              .slice()
+              .sort((a, b) => a.people.length - b.people.length)
+              .map(({ city: c, country: co }) => coordsFor(c, co))
+              .filter(Boolean);
+            
+            // Apply offset if this circle overlaps with others
+            const [lat, lng] = getOffsetForOverlap(coords, allCoords, index);
+            const count = people.length;
+            const title = `${city}${country ? ", " + country : ""}`;
+            const color = countryColors[country] || '#666666';
 
-          // Create custom icon with text for counts > 1
-          const createTextIcon = (text, color) => {
-            return new DivIcon({
-              className: 'custom-div-icon',
-              html: `
-                <div style="
-                  background-color: ${color};
-                  width: ${radiusForCount(count) * 2}px;
-                  height: ${radiusForCount(count) * 2}px;
-                  border-radius: 50%;
-                  border: 2px solid white;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  color: white;
-                  font-weight: bold;
-                  font-size: ${Math.max(10, radiusForCount(count) * 0.6)}px;
-                  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-                  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                ">
-                  ${text}
-                </div>
-              `,
-              iconSize: [radiusForCount(count) * 2, radiusForCount(count) * 2],
-              iconAnchor: [radiusForCount(count), radiusForCount(count)]
-            });
-          };
-
-          return (
-            <Marker
-              key={`${city}-${country}`}
-              position={[lat, lng]}
-              icon={createTextIcon(count.toString(), color)}
-            >
-              <Tooltip direction="top" offset={[0, -2]} opacity={1} permanent={false}>
-                <div className="text-xs">
-                  <div className="font-medium mb-1">{title}</div>
-                  <div className="space-y-0.5 max-h-48 overflow-auto pr-1">
-                    {people
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((p) => (
-                        <div key={`${title}-${p.name}`}>
-                          <span className="font-semibold">{p.name}</span>{" "}
-                          <span className="text-neutral-500">({p.year})</span>
-                        </div>
-                      ))}
+            // Create custom icon with text for counts > 1
+            const createTextIcon = (text, color) => {
+              return new DivIcon({
+                className: 'custom-div-icon',
+                html: `
+                  <div style="
+                    background-color: ${color};
+                    width: ${radiusForCount(count) * 2}px;
+                    height: ${radiusForCount(count) * 2}px;
+                    border-radius: 50%;
+                    border: 2px solid white;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-weight: bold;
+                    font-size: ${Math.max(10, radiusForCount(count) * 0.6)}px;
+                    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                    z-index: ${10000 + (byCity.length - index)}; /* Higher z-index for smaller numbers */
+                  ">
+                    ${text}
                   </div>
-                  <div className="mt-1 text-neutral-500">{count} fellow{count > 1 ? "s" : ""}</div>
-                </div>
-              </Tooltip>
-            </Marker>
-          );
-        })}
+                `,
+                iconSize: [radiusForCount(count) * 2, radiusForCount(count) * 2],
+                iconAnchor: [radiusForCount(count), radiusForCount(count)]
+              });
+            };
+
+            return (
+              <Marker
+                key={`${city}-${country}`}
+                position={[lat, lng]}
+                icon={createTextIcon(count.toString(), color)}
+                zIndexOffset={1000 + (byCity.length - index)} // Higher z-index for smaller numbers
+              >
+                <Tooltip direction="top" offset={[0, -2]} opacity={1} permanent={false}>
+                  <div className="text-xs">
+                    <div className="font-medium mb-1">{title}</div>
+                    <div className="space-y-0.5 max-h-48 overflow-auto pr-1">
+                      {people
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((p) => (
+                          <div key={`${title}-${p.name}`}>
+                            <span className="font-semibold">{p.name}</span>{" "}
+                            <span className="text-neutral-500">({p.year})</span>
+                          </div>
+                        ))}
+                    </div>
+                    <div className="mt-1 text-neutral-500">{count} fellow{count > 1 ? "s" : ""}</div>
+                  </div>
+                </Tooltip>
+              </Marker>
+            );
+          })}
       </MapContainer>
 
       {missing.length > 0 && (
