@@ -4,14 +4,14 @@ import { DivIcon } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 /**
- * WorldFellowsMap (fixed)
+ * WorldFellowsMap
  *
- * Fixes
- * - Adds missing city coordinates (Charlotte, Minneapolis, Madison, etc.)
- * - Disambiguates cities that exist in multiple countries (e.g., "Cambridge" US vs UK)
- *   by looking up coords using (city, country) first, then falling back to city-only.
- * - Defensive rendering if any coords are still missing.
- * - Adds lightweight self-tests to catch missing coords & Cambridge(UK) disambiguation.
+ * Features:
+ * - Displays fellows on a world map with city density visualization
+ * - Circle size represents number of fellows in each city
+ * - Organized coordinate database with all cities from the dataset
+ * - Defensive rendering if any coords are missing
+ * - Lightweight self-tests to catch missing coordinates
  *
  * Usage:
  * <WorldFellowsMap data={fellowsData} height={600} />
@@ -20,111 +20,58 @@ export default function WorldFellowsMap({ data = [], height = 600 }) {
   // ------------------------------------------------------------
   // Coordinates database
   // ------------------------------------------------------------
-  // 1) Primary lookup keyed by CITY|||COUNTRY (for disambiguation)
-  const cityCountryCoords = useMemo(
-    () => ({
-      // Disambiguations / explicit pairs
-      "Cambridge|||UK": [52.2053, 0.1218], // Cambridge, England
-      "Cambridge|||United Kingdom": [52.2053, 0.1218],
-      "Cambridge|||U.K.": [52.2053, 0.1218],
-      "Cambridge|||U.K": [52.2053, 0.1218],
-      "Cambridge|||Britain": [52.2053, 0.1218],
-      "Hong Kong|||China": [22.3193, 114.1694],
-      "New York City|||USA": [40.7128, -74.006],
-      "New York|||USA": [40.7128, -74.006],
-      "Washington DC|||USA": [38.9072, -77.0369],
-      "Santa Monica|||USA": [34.0195, -118.4912],
-      "San Diego|||USA": [32.7157, -117.1611],
-      "Oakland|||USA": [37.8044, -122.2711],
-      "Los Angeles|||USA": [34.0522, -118.2437],
-      "Salt Lake City|||USA": [40.7608, -111.891],
-      "Winston-Salem|||USA": [36.0999, -80.2442],
-      "Raleigh|||USA": [35.7796, -78.6382],
-      "Roanoke|||USA": [37.2709, -79.9414],
-      "Austin|||USA": [30.2672, -97.7431],
-      "Phoenix|||USA": [33.4484, -112.074],
-      "Madison|||USA": [43.0731, -89.4012],
-      "Minneapolis|||USA": [44.9778, -93.2650],
-      "Charlotte|||USA": [35.2271, -80.8431],
-      "San Francisco|||USA": [37.7749, -122.4194],
-      "Boston|||USA": [42.3601, -71.0589],
-      "Orlando|||USA": [28.5383, -81.3792],
-      "Denver|||USA": [39.7392, -104.9903],
-      "Toronto|||Canada": [43.6532, -79.3832],
-      "Montreal|||Canada": [45.5019, -73.5674],
-      "Sherbrooke|||Canada": [45.4042, -71.8929],
-      "London|||UK": [51.5074, -0.1278],
-      "London|||United Kingdom": [51.5074, -0.1278],
-      "Oxford|||UK": [51.752, -1.2577],
-      "Zurich|||Switzerland": [47.3769, 8.5417],
-      "Berlin|||Germany": [52.52, 13.405],
-      "Munich|||Germany": [48.1351, 11.582],
-      "Ghent|||Belgium": [51.0543, 3.7174],
-      "Dublin|||Ireland": [53.3498, -6.2603],
-      "Ahmedabad|||India": [23.0225, 72.5714],
-    }),
-    []
-  );
-
-  // 2) Fallback lookup keyed by CITY only (used when country-specific pair missing)
   const cityCoords = useMemo(
     () => ({
       // USA
       "San Francisco": [37.7749, -122.4194],
-      Denver: [39.7392, -104.9903],
-      "Washington DC": [38.9072, -77.0369],
-      Roanoke: [37.2709, -79.9414],
-      Austin: [30.2672, -97.7431],
-      Phoenix: [33.4484, -112.074],
-      Raleigh: [35.7796, -78.6382],
       "New York": [40.7128, -74.006],
       "New York City": [40.7128, -74.006],
-      Boston: [42.3601, -71.0589],
-      Orlando: [28.5383, -81.3792],
-      "Santa Monica": [34.0195, -118.4912],
-      Oakland: [37.8044, -122.2711],
       "Los Angeles": [34.0522, -118.2437],
+      "Washington DC": [38.9072, -77.0369],
+      Boston: [42.3601, -71.0589],
+      Austin: [30.2672, -97.7431],
+      Denver: [39.7392, -104.9903],
+      "San Diego": [32.7157, -117.1611],
+      Phoenix: [33.4484, -112.074],
+      Orlando: [28.5383, -81.3792],
       "Salt Lake City": [40.7608, -111.891],
       "Winston-Salem": [36.0999, -80.2442],
-      "San Diego": [32.7157, -117.1611],
-      "Ann Arbor": [42.2808, -83.743],
-      Ferrum: [36.9224, -80.0123],
-      Boise: [43.615, -116.2023],
-      Berkeley: [37.8715, -122.273],
-      Corvallis: [44.5646, -123.262],
+      Raleigh: [35.7796, -78.6382],
+      Roanoke: [37.2709, -79.9414],
       Minneapolis: [44.9778, -93.2650],
       Charlotte: [35.2271, -80.8431],
       Madison: [43.0731, -89.4012],
+      "North Bend": [43.4065, -124.2243],
+      Golden: [39.7555, -105.2211],
+      "Portola Valley": [37.3841, -122.2352],
 
       // Canada
-      Montreal: [45.5019, -73.5674],
       Toronto: [43.6532, -79.3832],
+      Montreal: [45.5019, -73.5674],
       Sherbrooke: [45.4042, -71.8929],
 
-      // U.K. & Ireland
+      // UK & Ireland
       London: [51.5074, -0.1278],
-      "Cambridge": [52.2053, 0.1218], // Default to UK Cambridge if country is missing
+      Cambridge: [52.2053, 0.1218],
       Oxford: [51.752, -1.2577],
       Dublin: [53.3498, -6.2603],
+      Bracknell: [51.4154, -0.7505],
 
       // Europe
       Berlin: [52.52, 13.405],
       Munich: [48.1351, 11.582],
       Zurich: [47.3769, 8.5417],
+      Geneva: [46.2044, 6.1432],
       Ghent: [51.0543, 3.7174],
 
       // Asia
       "Hong Kong": [22.3193, 114.1694],
       Ahmedabad: [23.0225, 72.5714],
-
-      // NOTE: US Cambridge also exists; use the (city,country) map when you need it:
-      // "Cambridge|||USA": [42.3736, -71.1097]
     }),
     []
   );
 
-  const coordsFor = (city, country) =>
-    cityCountryCoords[`${city}|||${country}`] || cityCoords[city] || null;
+  const coordsFor = (city, country) => cityCoords[city] || null;
 
   // ------------------------------------------------------------
   // Aggregate fellows by (city, country) and handle overlaps
@@ -326,18 +273,17 @@ function runSelfTests() {
     { name: "Test A", city: "Charlotte", country: "USA", year: 2025 }, // ensure new city works
     { name: "Test B", city: "Minneapolis", country: "USA", year: 2025 }, // ensure new city works
     { name: "Test C", city: "Madison", country: "USA", year: 2025 }, // ensure new city works
-    { name: "Test D", city: "Cambridge", country: "UK", year: 2024 }, // disambiguation should resolve to UK coords
+    { name: "Test D", city: "Cambridge", country: "UK", year: 2024 }, // should resolve to UK coords
   ];
 
   // A tiny harness that reuses the same lookups as the component
-  const cityCountryCoords = {
-    "Cambridge|||UK": [52.2053, 0.1218],
-    "Charlotte|||USA": [35.2271, -80.8431],
-    "Minneapolis|||USA": [44.9778, -93.2650],
-    "Madison|||USA": [43.0731, -89.4012],
+  const cityCoords = {
+    Cambridge: [52.2053, 0.1218],
+    Charlotte: [35.2271, -80.8431],
+    Minneapolis: [44.9778, -93.2650],
+    Madison: [43.0731, -89.4012],
   };
-  const cityCoords = { Cambridge: [52.2053, 0.1218] };
-  const coordsFor = (city, country) => cityCountryCoords[`${city}|||${country}`] || cityCoords[city] || null;
+  const coordsFor = (city, country) => cityCoords[city] || null;
 
   const missing = [];
   for (const f of testData) {
